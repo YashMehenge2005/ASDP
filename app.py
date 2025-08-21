@@ -647,14 +647,14 @@ processor = DataProcessor()
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return jsonify({"message": "ASDP API ready. Use the React frontend."})
 
 
 # Authentication pages and handlers
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'GET':
-        return render_template('login.html')
+        return jsonify({"ready": True, "route": "/login"})
 
     # Support form submit or JSON
     data = request.json if request.is_json else request.form
@@ -681,7 +681,7 @@ def login():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'GET':
-        return render_template('register.html')
+        return jsonify({"ready": True, "route": "/register"})
 
     data = request.json if request.is_json else request.form
     username = (data.get('username') or '').strip()
@@ -708,9 +708,7 @@ def register():
 def logout():
     if current_user.is_authenticated:
         logout_user()
-    if request.method == 'POST' and request.is_json:
-        return jsonify({'success': True})
-    return redirect(url_for('login'))
+    return jsonify({'success': True})
 
 
 # Deprecated duplicate JSON-only login/logout removed (handled above by GET/POST routes)
@@ -722,10 +720,16 @@ def logout():
 def admin_summary():
     users_count = User.query.count()
     datasets_count = Dataset.query.count()
+    runs_count = ProcessingRun.query.count()
+    reports_count = ReportRecord.query.count()
     latest_datasets = Dataset.query.order_by(Dataset.uploaded_at.desc()).limit(10).all()
+    recent_runs = ProcessingRun.query.order_by(ProcessingRun.created_at.desc()).limit(10).all()
+    all_users = User.query.order_by(User.created_at.desc()).all()
     payload = {
         'users': users_count,
         'datasets': datasets_count,
+        'runs': runs_count,
+        'reports': reports_count,
         'latest': [
             {
                 'id': d.id,
@@ -733,9 +737,33 @@ def admin_summary():
                 'rows': d.rows,
                 'columns': d.columns,
                 'owner': (d.owner.username if d.owner else None),
+                'owner_profile_image': (d.owner.profile_image if d.owner else None),
                 'uploaded_at': d.uploaded_at.isoformat()
             }
             for d in latest_datasets
+        ],
+        'recent_runs': [
+            {
+                'id': r.id,
+                'dataset': (r.dataset.filename if r.dataset else None),
+                'user': (r.user.username if r.user else None),
+                'user_profile_image': (r.user.profile_image if r.user else None),
+                'success': r.success,
+                'plots_count': r.plots_count,
+                'created_at': r.created_at.isoformat()
+            }
+            for r in recent_runs
+        ],
+        'all_users': [
+            {
+                'id': u.id,
+                'username': u.username,
+                'email': u.email,
+                'role': u.role,
+                'profile_image': u.profile_image,
+                'created_at': u.created_at.isoformat() if u.created_at else None
+            }
+            for u in all_users
         ]
     }
     return jsonify(payload)
@@ -745,30 +773,22 @@ def admin_summary():
 @login_required
 @admin_required
 def admin_page():
-    users_count = User.query.count()
-    datasets_count = Dataset.query.count()
-    runs_count = ProcessingRun.query.count()
-    reports_count = ReportRecord.query.count()
-    latest_datasets = Dataset.query.order_by(Dataset.uploaded_at.desc()).limit(10).all()
-    latest_runs = ProcessingRun.query.order_by(ProcessingRun.created_at.desc()).limit(10).all()
-    all_users = User.query.order_by(User.created_at.desc()).all()
-    return render_template(
-        'admin.html',
-        users=users_count,
-        datasets=datasets_count,
-        runs=runs_count,
-        reports=reports_count,
-        latest=latest_datasets,
-        recent_runs=latest_runs,
-        all_users=all_users
-    )
+    return jsonify({"message": "Use React admin UI", "route": "/admin"})
 
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
     if request.method == 'GET':
-        return render_template('profile.html', user=current_user)
+        return jsonify({
+            'user': {
+                'id': current_user.id,
+                'username': current_user.username,
+                'email': current_user.email,
+                'role': current_user.role,
+                'profile_image': current_user.profile_image
+            }
+        })
     # POST: update username/email and optionally password
     data = request.form
     new_username = (data.get('username') or '').strip()
@@ -819,10 +839,13 @@ def admin_update_role(user_id: int):
         return jsonify({'error': 'Invalid role'}), 400
     target.role = role
     db.session.commit()
-    if request.is_json:
-        return jsonify({'success': True})
-    # Redirect back to admin dashboard after update
-    return redirect(url_for('admin_page'))
+    return jsonify({'success': True})
+
+@app.route('/me')
+def me():
+    if current_user.is_authenticated:
+        return jsonify({'authenticated': True, 'user': {'id': current_user.id, 'username': current_user.username, 'role': current_user.role, 'email': current_user.email, 'profile_image': current_user.profile_image}})
+    return jsonify({'authenticated': False})
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
