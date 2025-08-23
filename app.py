@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, send_from_directory, make_response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
@@ -21,7 +21,20 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-CORS(app)
+CORS(app, 
+     origins=[
+         'http://localhost:3000',
+         'http://localhost:5173', 
+         'http://127.0.0.1:3000',
+         'http://127.0.0.1:5173',
+         'https://asdp-frontend.netlify.app',
+         'https://*.netlify.app',
+         'https://asdp-g3cm.onrender.com'
+     ], 
+     supports_credentials=True,
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     expose_headers=['Access-Control-Allow-Credentials'])
 
 # Database and authentication setup
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
@@ -39,6 +52,21 @@ os.makedirs(app.config['AVATAR_FOLDER'], exist_ok=True)
 @app.route('/healthz')
 def healthz():
     return jsonify({"status": "ok"})
+
+# CORS preflight handler
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    response = make_response()
+    response.headers.add('Access-Control-Allow-Origin', 'https://asdp-frontend.netlify.app')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+# Test endpoint for frontend
+@app.route('/test')
+def test():
+    return jsonify({"message": "Backend API is working", "timestamp": datetime.utcnow().isoformat()})
 
 # Auth models
 class User(UserMixin, db.Model):
